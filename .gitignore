@@ -1,0 +1,12 @@
+
+*.o
+
+c1/
+
+server/
+
+.vscode/
+
+dht-example
+
+*.id

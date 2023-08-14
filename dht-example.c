@@ -124,7 +124,7 @@ main(int argc, char **argv)
     time_t tosleep = 0;
     char *id_file = "dht-example.id";
     int opt;
-    int quiet = 0, ipv4 = 1, ipv6 = 1;
+    int quiet = 0, ipv4 = 1, ipv6 = 0;
     struct sockaddr_in sin;
     struct sockaddr_in6 sin6;
     struct sockaddr_storage from;
@@ -143,8 +143,6 @@ main(int argc, char **argv)
 
         switch(opt) {
         case 'q': quiet = 1; break;
-        case '4': ipv6 = 0; break;
-        case '6': ipv4 = 0; break;
         case 'b': {
             char buf[16];
             int rc;
@@ -155,7 +153,7 @@ main(int argc, char **argv)
             }
             rc = inet_pton(AF_INET6, optarg, buf);
             if(rc == 1) {
-                memcpy(&sin6.sin6_addr, buf, 16);
+                printf("IPv6 not supported yet.\n");
                 break;
             }
             goto usage;
@@ -214,8 +212,7 @@ main(int argc, char **argv)
 
     close(fd);
 
-    if(argc < 2)
-        goto usage;
+
 
     i = optind;
 
@@ -230,12 +227,8 @@ main(int argc, char **argv)
         struct addrinfo hints, *info, *infop;
         memset(&hints, 0, sizeof(hints));
         hints.ai_socktype = SOCK_DGRAM;
-        if(!ipv6)
-            hints.ai_family = AF_INET;
-        else if(!ipv4)
-            hints.ai_family = AF_INET6;
-        else
-            hints.ai_family = 0;
+        hints.ai_family = AF_INET;
+
         rc = getaddrinfo(argv[i], argv[i + 1], &hints, &info);
         if(rc != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
@@ -266,35 +259,16 @@ main(int argc, char **argv)
     /* We need an IPv4 and an IPv6 socket, bound to a stable port.  Rumour
        has it that uTorrent likes you better when it is the same as your
        Bittorrent port. */
-    if(ipv4) {
-        s = socket(PF_INET, SOCK_DGRAM, 0);
-        if(s < 0) {
-            perror("socket(IPv4)");
-        }
-        rc = set_nonblocking(s, 1);
-        if(rc < 0) {
-            perror("set_nonblocking(IPv4)");
-            exit(1);
-        }
+    s = socket(PF_INET, SOCK_DGRAM, 0);
+    if(s < 0) {
+        perror("socket(IPv4)");
     }
-
-    if(ipv6) {
-        s6 = socket(PF_INET6, SOCK_DGRAM, 0);
-        if(s6 < 0) {
-            perror("socket(IPv6)");
-        }
-        rc = set_nonblocking(s6, 1);
-        if(rc < 0) {
-            perror("set_nonblocking(IPv6)");
-            exit(1);
-        }
-    }
-
-    if(s < 0 && s6 < 0) {
-        fprintf(stderr, "Eek!");
+    rc = set_nonblocking(s, 1);
+    if(rc < 0) {
+        perror("set_nonblocking(IPv4)");
         exit(1);
     }
-
+    
 
     if(s >= 0) {
         sin.sin_port = htons(port);
@@ -304,28 +278,9 @@ main(int argc, char **argv)
             exit(1);
         }
     }
-
-    if(s6 >= 0) {
-        int rc;
-        int val = 1;
-
-        rc = setsockopt(s6, IPPROTO_IPV6, IPV6_V6ONLY,
-                        (char *)&val, sizeof(val));
-        if(rc < 0) {
-            perror("setsockopt(IPV6_V6ONLY)");
-            exit(1);
-        }
-
-        /* BEP-32 mandates that we should bind this socket to one of our
-           global IPv6 addresses.  In this simple example, this only
-           happens if the user used the -b flag. */
-
-        sin6.sin6_port = htons(port);
-        rc = bind(s6, (struct sockaddr*)&sin6, sizeof(sin6));
-        if(rc < 0) {
-            perror("bind(IPv6)");
-            exit(1);
-        }
+    else{
+        fprintf(stderr, "Eek!");
+        exit(1);
     }
 
     /* Init the dht. */
@@ -442,7 +397,7 @@ main(int argc, char **argv)
     return 0;
 
  usage:
-    printf("Usage: dht-example [-q] [-4] [-6] [-i filename] [-b address]...\n"
+    printf("Usage: dht-example [-q]  [-i filename] [-b address]...\n"
            "                   port [address port]...\n");
     exit(1);
 }
