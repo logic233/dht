@@ -17,8 +17,10 @@
 #include <netdb.h>
 #include <signal.h>
 #include <sys/signal.h>
+#include <assert.h>
 
 #include "dht.h"
+#include "argtable3.h"
 
 #define MAX_BOOTSTRAP_NODES 20
 static struct sockaddr_storage bootstrap_nodes[MAX_BOOTSTRAP_NODES];
@@ -113,10 +115,30 @@ set_nonblocking(int fd, int nonblocking)
     return 0;
 }
 
+static struct 
+{
+    struct arg_int *port;
+    struct arg_str *boot_address;
+    struct arg_str *boot_port;
+    struct arg_end *end;
+} dht_init_args;
 
+static void register_dht_init(void){
+    dht_init_args.port = arg_int0(NULL, NULL, "<port>", "Port to listen on");
+    dht_init_args.boot_address = arg_strn("a", "boot_address", "<boot_address>", 0, 1, "Bootstrap node address");
+    dht_init_args.boot_port = arg_strn("p", "boot_port", "<boot_port>", 0, 1, "Bootstrap node port");
+    dht_init_args.end = arg_end(20);
+}
 int
 main(int argc, char **argv)
 {
+    register_dht_init();
+    int nerrors = arg_parse(argc, argv, (void **)&dht_init_args);
+    if (nerrors != 0) {
+        arg_print_errors(stderr, dht_init_args.end, argv[0]);
+        return 1;
+    }
+
     int i, rc, fd;
     int s = -1, s6 = -1, port;
     int have_id = 0;
@@ -136,36 +158,6 @@ main(int argc, char **argv)
     memset(&sin6, 0, sizeof(sin6));
     sin6.sin6_family = AF_INET6;
 
-    while(1) {
-        opt = getopt(argc, argv, "q46b:i:");
-        if(opt < 0)
-            break;
-
-        switch(opt) {
-        case 'q': quiet = 1; break;
-        case 'b': {
-            char buf[16];
-            int rc;
-            rc = inet_pton(AF_INET, optarg, buf);
-            if(rc == 1) {
-                memcpy(&sin.sin_addr, buf, 4);
-                break;
-            }
-            rc = inet_pton(AF_INET6, optarg, buf);
-            if(rc == 1) {
-                printf("IPv6 not supported yet.\n");
-                break;
-            }
-            goto usage;
-        }
-            break;
-        case 'i':
-            id_file = optarg;
-            break;
-        default:
-            goto usage;
-        }
-    }
 
     /* Ids need to be distributed evenly, so you cannot just use your
        bittorrent id.  Either generate it randomly, or take the SHA-1 of
@@ -214,30 +206,26 @@ main(int argc, char **argv)
 
 
 
-    i = optind;
 
-    if(argc < i + 1)
-        goto usage;
-
-    port = atoi(argv[i++]);
+    if(dht_init_args.port->count > 0)
+        port = dht_init_args.port->ival[0];
     if(port <= 0 || port >= 0x10000)
         goto usage;
 
-    while(i < argc) {
+    assert(dht_init_args.boot_address->count == dht_init_args.boot_port->count);
+
+    for(i = 0; i< dht_init_args.boot_address -> count ;i ++)
+    {
         struct addrinfo hints, *info, *infop;
         memset(&hints, 0, sizeof(hints));
         hints.ai_socktype = SOCK_DGRAM;
         hints.ai_family = AF_INET;
 
-        rc = getaddrinfo(argv[i], argv[i + 1], &hints, &info);
+        rc = getaddrinfo(dht_init_args.boot_address->sval[i], dht_init_args.boot_port->sval[i], &hints, &info);
         if(rc != 0) {
             fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rc));
             exit(1);
         }
-
-        i++;
-        if(i >= argc)
-            goto usage;
 
         infop = info;
         while(infop) {
@@ -248,7 +236,6 @@ main(int argc, char **argv)
         }
         freeaddrinfo(info);
 
-        i++;
     }
 
     /* If you set dht_debug to a stream, every action taken by the DHT will

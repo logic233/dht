@@ -1,7 +1,7 @@
 CFLAGS = -g -Wall
-LDLIBS = -lcrypt
+LDLIBS = -lcrypt -lm
 
-dht-example: dht-example.o dht.o
+dht-example: dht-example.o dht.o argtable3.o
 
 all: dht-example
 
